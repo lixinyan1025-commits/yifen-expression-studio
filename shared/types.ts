@@ -29,6 +29,7 @@ export type Topic = {
   category: string;
   source: 'local' | 'ai';
   noteIds: string[];
+  reading?: Array<{ title: string; text: string }>;
 };
 export type Segment = { id: number; start: number; end: number; text: string };
 export type Pause = { id: string; start: number; end: number; duration: number };
@@ -97,6 +98,7 @@ export type Session = {
   interrupted?: boolean;
 };
 export type ServiceStatus = {
+  runtime?: 'local' | 'cloud';
   ai: boolean;
   stt: boolean;
   aiHost: string;

@@ -8,7 +8,7 @@ export function readPreferences(): Preferences {
   const fallback: Preferences = {
     mode: 'impromptu',
     threshold: 1.5,
-    useAiTopic: true,
+    useAiTopic: false,
     selected: [],
   };
   try {
@@ -19,7 +19,7 @@ export function readPreferences(): Preferences {
         typeof value.threshold === 'number' && value.threshold >= 0.5 && value.threshold <= 5
           ? value.threshold
           : 1.5,
-      useAiTopic: typeof value.useAiTopic === 'boolean' ? value.useAiTopic : true,
+      useAiTopic: typeof value.useAiTopic === 'boolean' ? value.useAiTopic : false,
       selected: Array.isArray(value.selected)
         ? value.selected.filter((s: unknown): s is string => typeof s === 'string').slice(0, 3)
         : [],

@@ -36,9 +36,10 @@ async function importNotes(page: Page) {
 }
 async function getReady(page: Page) {
   await importNotes(page);
-  await page.getByRole('button', { name: '用这些笔记练习' }).click();
+  await page.getByRole('button', { name: '先学资料，再演讲' }).click();
   await expect(page.getByRole('timer')).toHaveText('10:00');
-  await expect(page.getByText('这段私人笔记只能在学习时展示。机会成本与自我认知。')).toBeVisible();
+  await expect(page.getByText('这段私人笔记只能在学习时展示。机会成本与自我认知。')).toHaveCount(0);
+  await expect(page.locator('.brief-card')).toHaveCount(3);
   await expect(page.getByText(/面对家人的担心/)).toHaveCount(0);
   await page.getByRole('button', { name: '结束学习，进入挑战' }).click();
   await expect(page.getByRole('button', { name: '开始演讲', exact: true })).toBeVisible();
@@ -115,7 +116,7 @@ test('explicit TEST provider responses connect real capture to transcript, issue
   await page.waitForTimeout(6800);
   await page.getByRole('button', { name: '结束演讲，查看复盘' }).click();
   await expect(page.locator('audio')).toBeVisible();
-  await page.getByRole('checkbox', { name: /允许本次训练上传/ }).check();
+  await page.getByRole('checkbox', { name: /允许本次训练/ }).check();
   await page.getByRole('button', { name: '转写并分析', exact: true }).click();
   await expect(page.getByText('测试：服务暂时不可用，录音与转写已保留。')).toBeVisible();
   await expect(page.locator('.transcript button')).toHaveCount(2);
@@ -155,12 +156,14 @@ test('prepared mode reveals the question before study; mobile library and traini
   await page.getByRole('button', { name: /准备模式/ }).click();
   await page.screenshot({ path: '.local/home-mobile.png', fullPage: true });
   await page.getByRole('button', { name: '开始今天的练习' }).click();
-  await expect(page.locator('.prepared-topic')).toContainText('面对家人的担心');
+  await expect(page.locator('.prepared-topic h3')).not.toBeEmpty();
   await expect(page.getByRole('timer')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '.local/study-mobile.png', fullPage: true });
 });
-test('denied microphone exposes a useful retry; no recording or fake result is created', async () => {
+test('denied microphone exposes a useful retry; no recording or fake result is created', async ({
+  baseURL,
+}) => {
   // Fake-UI capture bypasses permissions, so this case uses a separate real permission context.
   const executablePath = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
   const browser = await chromium.launch({
@@ -168,15 +171,26 @@ test('denied microphone exposes a useful retry; no recording or fake result is c
     args: ['--use-fake-device-for-media-stream'],
   });
   try {
-    const context = await browser.newContext({ baseURL: 'http://localhost:4317' });
+    const context = await browser.newContext({ baseURL });
     const page = await context.newPage();
+    await page.route('**/api/vault', (route) =>
+      route.fulfill({
+        json: {
+          configured: false,
+          notes: [],
+          rootId: '',
+          rootPath: '',
+          syncedAt: new Date().toISOString(),
+        },
+      }),
+    );
     await getReady(page);
     const cdp = await context.newCDPSession(page);
     const { targetInfo } = await cdp.send('Target.getTargetInfo');
     await cdp.send('Browser.setPermission', {
       permission: { name: 'microphone' },
       setting: 'denied',
-      origin: 'http://localhost:4317',
+      origin: baseURL,
       browserContextId: targetInfo.browserContextId,
     });
     await page.getByRole('button', { name: '开始演讲', exact: true }).click();
@@ -220,7 +234,7 @@ test('ten-minute deadline is based on wall clock and reveals the hidden question
 }) => {
   await importNotes(page);
   await page.clock.install();
-  await page.getByRole('button', { name: '用这些笔记练习' }).click();
+  await page.getByRole('button', { name: '先学资料，再演讲' }).click();
   await expect(page.getByText(/面对家人的担心/)).toHaveCount(0);
   await page.clock.fastForward(600001);
   await expect(page.getByRole('button', { name: '开始演讲', exact: true })).toBeVisible();
@@ -259,7 +273,7 @@ test('desktop empty state and missing service status are honest, responsive and 
     if (r.method() === 'POST' && !r.url().endsWith('/api/vault')) posts.push(r.url());
   });
   await page.goto('/');
-  await expect(page.getByText('让知识，成为你的表达。')).toBeVisible();
+  await expect(page.getByText('把想法，自然说出来。')).toBeVisible();
   await page.screenshot({ path: '.local/home-desktop.png', fullPage: true });
   await page.getByRole('button', { name: '服务与隐私' }).click();
   await expect(page.getByText('未配置', { exact: true })).toHaveCount(2);

@@ -16,13 +16,13 @@ test('Obsidian frontmatter, title, inline Unicode and nested tags are preserved'
 });
 test('invalid YAML fails explicitly rather than deleting metadata', () =>
   assert.throws(() => parseNote('---\ntags: [未闭合\n---\n正文', 'broken.md', 'n'), /YAML/));
-test('local topics are marked local, use realistic scenarios and do not copy titles', () => {
-  const n = parseNote('# 长期主义\n选择与机会成本', 'note.md', 'n');
-  const t = localTopic([n]);
+test('common topics are independent of notes, contain brief context and avoid immediate repetition', () => {
+  const t = localTopic(undefined, () => 0);
   assert.equal(t.source, 'local');
-  assert.ok(t.text.includes('专业'));
-  assert.ok(!t.text.includes(n.title));
-  assert.deepEqual(t.noteIds, ['n']);
+  assert.ok(t.text.includes('短视频'));
+  assert.deepEqual(t.noteIds, []);
+  assert.equal(t.reading?.length, 3);
+  assert.notEqual(localTopic(t.text, () => 0).text, t.text);
 });
 test('WAV round trip preserves duration, pause location and sample amplitude', () => {
   const samples = tone(6);

@@ -34,13 +34,13 @@ test('training preferences and selected notes persist, upload consent does not',
   await page.getByRole('button', { name: '今日练习', exact: true }).click();
   await page.getByRole('button', { name: /准备模式/ }).click();
   await page.locator('.inline-select select').selectOption('local');
-  await page.getByRole('checkbox', { name: /允许本次训练上传/ }).check();
+  await page.getByRole('checkbox', { name: /允许本次训练/ }).check();
   await page.getByRole('button', { name: '服务与隐私', exact: true }).click();
   await page.getByLabel('停顿阈值').fill('2.4');
   await page.reload();
   await expect(page.getByRole('button', { name: /准备模式/ })).toHaveClass(/active/);
   await expect(page.locator('.inline-select select')).toHaveValue('local');
-  await expect(page.getByRole('checkbox', { name: /允许本次训练上传/ })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /允许本次训练/ })).not.toBeChecked();
   await expect(page.locator('.material-row')).toHaveCount(1);
   await page.getByRole('button', { name: '服务与隐私', exact: true }).click();
   await expect(page.getByLabel('停顿阈值')).toHaveValue('2.4');
@@ -51,7 +51,7 @@ test('study pause freezes time, resumes the same remaining duration, and can exi
 }) => {
   await localNotes(page);
   await page.clock.install();
-  await page.getByRole('button', { name: '用这些笔记练习' }).click();
+  await page.getByRole('button', { name: '先学资料，再演讲' }).click();
   await page.clock.fastForward(5000);
   await expect(page.getByRole('timer')).toHaveText('09:55');
   await page.getByRole('button', { name: '暂停学习' }).click();

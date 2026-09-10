@@ -50,6 +50,7 @@ const pages = [
 ] as const;
 const apiNotes = (notes: Note[]) =>
   notes.map(({ id, title, body, tags }) => ({ id, title, body: body.slice(0, 8000), tags }));
+const cloud = import.meta.env.MODE === 'cloud';
 
 export default function App() {
   const [preferences] = useState(readPreferences);
@@ -74,9 +75,7 @@ export default function App() {
   const [status, setStatus] = useState<ServiceStatus>(),
     [notice, setNotice] = useState(''),
     [busy, setBusy] = useState('');
-  const [studyNotes, setStudyNotes] = useState<Note[]>([]),
-    [studyTab, setStudyTab] = useState(0),
-    [topic, setTopic] = useState<Topic>();
+  const [topic, setTopic] = useState<Topic>();
   const [deadline, setDeadline] = useState<number>(),
     [remaining, setRemaining] = useState(600),
     [level, setLevel] = useState(0);
@@ -226,7 +225,7 @@ export default function App() {
   const toggleNote = (id: string) => {
     if (selected.includes(id)) setSelected(selected.filter((x) => x !== id));
     else if (selected.length < 3) setSelected([...selected, id]);
-    else setNotice('一次专注学习最多 3 篇笔记，请先取消一篇。');
+    else setNotice('一次复盘最多关联 3 篇储备笔记，请先取消一篇。');
   };
   const removeNote = async (note: Note) => {
     if (
@@ -244,48 +243,33 @@ export default function App() {
       setNotice('删除失败，请重试。');
     }
   };
-  const generate = async (materials: Note[], local = false) => {
-    if (!local && useAiTopic && status?.ai && allowAi)
-      return api<Topic>('topic', { notes: apiNotes(materials) });
-    return localTopic(materials);
+  const generate = async (local = false) => {
+    const seed = localTopic(topic?.text);
+    const result =
+      !local && useAiTopic && status?.ai && allowAi
+        ? await api<Topic>('topic', { category: seed.category, seed: seed.text })
+        : seed;
+    // Optional notes are attached for review inspiration only, never sent to topic generation.
+    return { ...result, noteIds: chosen.map((n) => n.id) };
   };
-  const beginStudy = async () => {
+  const beginStudy = async (local = false) => {
     setStudyPaused(false);
-    const materials = chosen.length
-      ? chosen
-      : [...notes]
-          .sort(
-            (a, b) =>
-              Number(!!a.source?.isIndex) - Number(!!b.source?.isIndex) ||
-              a.importedAt.localeCompare(b.importedAt),
-          )
-          .slice(0, 3);
-    if (!materials.length) {
-      setPage('library');
-      setNotice('先导入一些 Markdown 笔记，再开始练习。');
-      return;
-    }
     setPage('train');
     setNotice('');
     setPreviousId(undefined);
     setActive(undefined);
-    setStudyNotes(materials);
-    setStudyTab(0);
-    setTopic(undefined);
     endingStudy.current = false;
-    if (mode === 'prepared') {
-      setPhase('topic');
-      setBusy('正在准备题目');
-      try {
-        setTopic(await generate(materials));
-      } catch (e) {
-        setNotice((e as Error).message);
-        setPhase('idle');
-        setBusy('');
-        return;
-      }
+    setPhase('topic');
+    setBusy('正在准备话题相关信息');
+    try {
+      setTopic(await generate(local));
+    } catch (e) {
+      setNotice((e as Error).message);
+      setPhase('idle');
       setBusy('');
+      return;
     }
+    setBusy('');
     setRemaining(600);
     setDeadline(Date.now() + 600000);
     setPhase('study');
@@ -300,7 +284,7 @@ export default function App() {
     try {
       if (!topic) {
         setBusy('正在生成现实场景题');
-        setTopic(await generate(studyNotes, local));
+        setTopic(await generate(local));
       }
       setRemaining(60);
       setPhase('ready');
@@ -400,7 +384,6 @@ export default function App() {
     setTopic(s.topic);
     setMode(s.mode);
     setPreviousId(s.id);
-    setStudyNotes([]);
     setActive(undefined);
     setPage('train');
     setPhase('ready');
@@ -423,9 +406,11 @@ export default function App() {
         disabled={!!busy}
       />
       <span>
-        允许本次训练上传所选笔记节选、题目和录音，用于出题、转写与复盘。
+        允许本次训练使用 AI
+        出题、转写与复盘。出题不上传笔记；复盘可上传题目、录音和所选储备笔记节选。
         <small>
-          经本机服务发送至 {status?.aiHost || '配置的 AI 服务'} / {status?.sttHost || '语音服务'}
+          经{cloud ? '云端' : '本机'}服务发送至 {status?.aiHost || '配置的 AI 服务'} /{' '}
+          {status?.sttHost || '语音服务'}
           ；每篇笔记最多前 8,000 字符。取消勾选后不再发起新请求。
         </small>
       </span>
@@ -525,12 +510,20 @@ export default function App() {
           </span>
         </header>
         <div className="content">
+          {cloud && phase === 'idle' && (
+            <div className="notice">
+              <ShieldCheck size={20} />
+              <span>私人在线版 · 仅本人登录访问，数据保存在当前浏览器。</span>
+            </div>
+          )}
           {serviceOnline === false && (
             <div role="status" className="notice warning service-offline">
               <div>
-                <strong>本地网站服务未连接</strong>
+                <strong>{cloud ? '在线服务暂时未连接' : '本地网站服务未连接'}</strong>
                 <p>
-                  已保存的笔记和录音仍在本机。请双击项目里的「打开表达练习室.cmd」，再点击重新检测。
+                  {cloud
+                    ? '已保存的笔记和录音仍在当前浏览器。请检查网络，确认已登录站点所属账号，再点击重新检测。'
+                    : '已保存的笔记和录音仍在本机。请双击项目里的「打开表达练习室.cmd」，再点击重新检测。'}
                 </p>
               </div>
               <button onClick={() => void refreshStatus()}>重新检测</button>
@@ -595,8 +588,8 @@ export default function App() {
                 <>
                   <div className="page-intro">
                     <span className="eyebrow">A LITTLE PRACTICE, A CLEARER VOICE</span>
-                    <h1>让知识，成为你的表达。</h1>
-                    <p>读过的道理，经历的故事。给它们一分钟，被你真正说出来。</p>
+                    <h1>把想法，自然说出来。</h1>
+                    <p>每天一个常见话题，慢慢读，认真想，开口一分钟。</p>
                   </div>
                   <section className="hero">
                     <div className="hero-copy">
@@ -609,18 +602,16 @@ export default function App() {
                         一分钟，向外表达。
                       </h2>
                       <p>
-                        从你的知识库出发，在真实情境里练习思考。
+                        从常见话题出发，先读一点背景信息。
                         <br />
                         不必一开始就说得漂亮，先试着说清楚。
                       </p>
                       <button className="primary" onClick={() => void beginStudy()}>
-                        {notes.length ? '开始今天的练习' : '导入笔记，开始练习'}
+                        开始今天的练习
                         <ArrowRight size={18} />
                       </button>
                       <span className="hero-foot">
-                        {notes.length
-                          ? `已准备 ${chosen.length || Math.min(3, notes.length)} 篇学习笔记`
-                          : '从一篇自己的 Markdown 笔记开始'}
+                        先学习，再演讲 · 无需导入笔记
                         <span>·</span> 约 11 分钟
                       </span>
                     </div>
@@ -691,14 +682,14 @@ export default function App() {
                           onChange={(e) => setUseAiTopic(e.target.value === 'ai')}
                         >
                           <option value="ai">AI 场景题（未配置时使用内置题）</option>
-                          <option value="local">内置场景题 · 本地关键词匹配</option>
+                          <option value="local">常见话题 · 随机抽取</option>
                         </select>
                       </label>
                       {consent}
                     </section>
                     <section className="panel materials">
                       <div className="row spread">
-                        <h3>这次，学点什么</h3>
+                        <h3>我的个人储备</h3>
                         <button className="text-button" onClick={() => navigate('library')}>
                           {notes.length ? '选择笔记' : '去导入'}
                           <ArrowUpRight size={15} />
@@ -724,9 +715,8 @@ export default function App() {
                         <div className="empty-small">
                           <BookOpen size={28} />
                           <p>
-                            {notes.length
-                              ? '系统选取最多 3 篇正文笔记，优先避开入口和索引页。'
-                              : '你的经历和思考，就是最好的学习材料。'}
+                            知识库供你平时积累，题目独立抽取。可选最多 3
+                            篇笔记，仅在复盘时提供关联启发。
                           </p>
                         </div>
                       )}
@@ -734,12 +724,10 @@ export default function App() {
                         className="text-button system-pick"
                         onClick={() => {
                           setSelected([]);
-                          setNotice(
-                            '系统选取最多 3 篇正文笔记，优先避开入口和索引页。也可以在知识库手动选择。',
-                          );
+                          setNotice('本次不指定复盘笔记。题目和学习信息照常独立抽取。');
                         }}
                       >
-                        由系统选取
+                        不指定复盘笔记
                       </button>
                     </section>
                   </div>
@@ -753,7 +741,7 @@ export default function App() {
                         {
                           n: '01',
                           title: '专注学习',
-                          text: '在原始笔记里，吸收与思考',
+                          text: '读一点相关信息，想起自己的经历',
                           icon: BookOpen,
                         },
                         {
@@ -812,8 +800,7 @@ export default function App() {
                   </div>
                   <div className="study-tools">
                     <span>
-                      正在阅读第 {studyTab + 1} / {studyNotes.length} 篇 ·{' '}
-                      {studyPaused ? '计时已暂停' : '专注学习中'}
+                      {topic?.category} · 3 条背景信息 · {studyPaused ? '计时已暂停' : '专注学习中'}
                     </span>
                     <div className="row">
                       <button onClick={toggleStudyPause}>
@@ -838,34 +825,31 @@ export default function App() {
                       <span className="tag">准备模式 · 本次题目</span>
                       <h3>{topic.text}</h3>
                       <span className="caption">
-                        {topic.source === 'ai' ? 'AI 场景题' : '内置场景题 · 本地关键词匹配'}
+                        {topic.source === 'ai' ? 'AI 场景题' : '常见话题 · 随机抽取'}
                       </span>
                     </div>
                   )}
-                  <section className="panel reading">
-                    <div className="note-tabs">
-                      {studyNotes.map((n, i) => (
-                        <button
-                          className={i === studyTab ? 'active' : ''}
-                          onClick={() => setStudyTab(i)}
-                          key={n.id}
-                        >
-                          {n.title}
-                        </button>
-                      ))}
+                  <section className="reading-brief" aria-label="话题相关信息">
+                    <div className="brief-intro">
+                      <span className="eyebrow">读一点，想一想</span>
+                      <h2>关于{topic?.category}</h2>
+                      <p>以下是帮助理解话题的简短情境资料。没有标准答案，可以联系你自己的经历。</p>
                     </div>
-                    {studyNotes[studyTab] && (
-                      <>
-                        <div className="tags">
-                          {studyNotes[studyTab].tags.map((t) => (
-                            <span className="tag" key={t}>
-                              #{t}
-                            </span>
-                          ))}
+                    {topic?.reading?.map((item, i) => (
+                      <article className="brief-card" key={i}>
+                        <span className="brief-number">0{i + 1}</span>
+                        <div>
+                          <h3>{item.title}</h3>
+                          <p>{item.text}</p>
                         </div>
-                        <NoteBody note={studyNotes[studyTab]} />
-                      </>
-                    )}
+                      </article>
+                    ))}
+                    <p className="caption">
+                      {topic?.source === 'ai'
+                        ? 'AI 生成的情境资料，请结合自己的判断阅读。'
+                        : '编辑整理的常见情境资料，独立于个人笔记。'}{' '}
+                      可以提前结束学习，再用一分钟表达自己的看法。
+                    </p>
                   </section>
                   <div className="row spread study-actions">
                     <span className="muted">不必记住每一句。留下真正触动你的想法。</span>
@@ -1034,10 +1018,16 @@ export default function App() {
                   />
                   {!vault?.configured && (
                     <div className="notice">
-                      <span>可在本机配置 Obsidian 智慧目录，实现只读同步。</span>
-                      <button disabled={!!busy} onClick={() => void syncVault()}>
-                        读取本机连接
-                      </button>
+                      <span>
+                        {cloud
+                          ? '在线版请导入智慧目录中的 .md 文件；云端无法直接读取你电脑的 Obsidian。'
+                          : '可在本机配置 Obsidian 智慧目录，实现只读同步。'}
+                      </span>
+                      {!cloud && (
+                        <button disabled={!!busy} onClick={() => void syncVault()}>
+                          读取本机连接
+                        </button>
+                      )}
                     </div>
                   )}
                   {!notes.length ? (
@@ -1081,7 +1071,7 @@ export default function App() {
                           篇
                         </span>
                         <button className="primary" onClick={() => void beginStudy()}>
-                          用这些笔记练习
+                          先学资料，再演讲
                           <ArrowRight size={15} />
                         </button>
                       </div>
@@ -1337,14 +1327,20 @@ export default function App() {
                       </div>
                     </div>
                     <p>
-                      密钥仅由本机 Node 服务读取。请复制项目中的 <code>.env.example</code> 为{' '}
-                      <code>.env</code>，在本机填写服务地址、密钥和模型，再重启网站服务。
+                      {cloud ? (
+                        '在线版密钥仅在 Sites 的环境变量设置中配置，前端不会读取密钥。配置 AI_API_KEY、STT_API_KEY 及所需模型后，重新发布网站即可使用。'
+                      ) : (
+                        <>
+                          密钥仅由本机 Node 服务读取。请编辑项目中的 <code>.env</code>，保留已有
+                          Obsidian 路径，在本机填写服务地址、密钥和模型，再重启网站服务。
+                        </>
+                      )}
                     </p>
                     <details>
                       <summary>查看配置字段与接口要求</summary>
                       <pre>
                         {
-                          'AI_BASE_URL=https://api.openai.com/v1\nAI_API_KEY=在本机填写\nTOPIC_MODEL=gpt-4o-mini\nAUDIO_MODEL=gpt-audio\nSTT_BASE_URL=https://api.openai.com/v1\nSTT_API_KEY=在本机填写（留空则使用 AI_API_KEY）\nSTT_MODEL=whisper-1'
+                          'AI_BASE_URL=https://api.openai.com/v1\nAI_API_KEY=在服务端安全设置中填写\nTOPIC_MODEL=gpt-4o-mini\nAUDIO_MODEL=gpt-audio\nSTT_BASE_URL=https://api.openai.com/v1\nSTT_API_KEY=在服务端安全设置中填写（留空则使用 AI_API_KEY）\nSTT_MODEL=whisper-1'
                         }
                       </pre>
                       <p>
@@ -1354,7 +1350,10 @@ export default function App() {
                       </p>
                     </details>
                     <p className="caption">
-                      没有服务也能完成本地学习、内置题目、录音与回听；完整表达分析需要真实服务。不建议将当前个人版本直接暴露到公网。
+                      没有服务也能完成学习、内置题目、录音与回听；完整表达分析需要真实服务。
+                      {cloud
+                        ? '本站通过 ChatGPT 账号登录，仅站点所有者可访问。'
+                        : '本地版仅监听当前电脑。'}
                     </p>
                   </section>
                   <section className="panel">
@@ -1405,12 +1404,13 @@ export default function App() {
                     </div>
                     <h3>上传的范围与用途</h3>
                     <p>
-                      勾选允许后，出题会发送本次最多 3 篇笔记的标题、标签与正文节选；转写会发送本次
+                      勾选允许后，AI 出题只发送随机生活主题和问题种子；转写会发送本次
                       WAV；复盘会发送同一
-                      WAV、题目、原始转写、停顿数据与所选笔记节选。不会发送整个知识库。
+                      WAV、题目、原始转写、停顿数据与所选笔记节选。出题仅发送常见主题，不发送笔记。不会发送整个知识库。
                     </p>
                     <p>
-                      本机服务器不把音频和笔记写入磁盘，也不记录内容日志。配置的服务提供方可能按其政策保留上传内容；删除本机记录不会删除服务方已接收的数据。
+                      {cloud ? '云端接口' : '本机服务器'}
+                      不持久保存音频和笔记，也不记录内容日志。配置的服务提供方可能按其政策保留上传内容；删除本机记录不会删除服务方已接收的数据。
                     </p>
                     {consent}
                   </section>

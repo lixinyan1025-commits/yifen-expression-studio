@@ -1,6 +1,8 @@
 node_modules
 dist
 .local
+.site-build
+.wrangler
 test-results
 playwright-report
 package-lock.json
