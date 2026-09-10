@@ -17,6 +17,13 @@ const post = (path: string, body: unknown, extra = {}) =>
 
 test('cloud routes require gateway identity, reject cross-site calls and never expose secrets or local vault', async () => {
   assert.equal((await handleRequest(new Request(origin + '/api/status'), {})).status, 401);
+  const emailIdentity = await handleRequest(
+    new Request(origin + '/api/status', {
+      headers: { 'oai-authenticated-user-email': 'TEST_OWNER@example.invalid' },
+    }),
+    {},
+  );
+  assert.equal(emailIdentity.status, 200);
   assert.equal(
     (await handleRequest(post('/api/vault', {}, { origin: 'https://evil.test' }), {})).status,
     403,

@@ -35,7 +35,12 @@ const json = (body: unknown, status = 200) =>
 // is deployed only through the owner-private Sites operation, never as a public Worker.
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  if (!request.headers.get('oai-authenticated-user-id')) {
+  // Sites currently supplies an authenticated email on some production routes;
+  // newer runtimes also supply a stable user ID. The gateway owns the allowlist.
+  if (
+    !request.headers.get('oai-authenticated-user-id') &&
+    !request.headers.get('oai-authenticated-user-email')
+  ) {
     if (url.pathname.startsWith('/api/'))
       return json({ error: '请先登录本站所属的 ChatGPT 账号。' }, 401);
     return Response.redirect(new URL('/signin-with-chatgpt?return_to=%2F', url), 302);
