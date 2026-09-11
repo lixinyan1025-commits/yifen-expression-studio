@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'pages' ? '/yifen-expression-studio/' : '/',
   plugins: [react()],
   server: {
     watch: { ignored: ['**/.local/**', '**/test-results/**', '**/playwright-report/**'] },
@@ -17,4 +18,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

@@ -2,14 +2,22 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { LockKeyhole, ArrowRight, Leaf } from 'lucide-react';
 export default function AccessGate({ children }: { children: ReactNode }) {
   const cloud = import.meta.env.MODE === 'cloud';
-  const [allowed, setAllowed] = useState(!cloud);
-  const [checking, setChecking] = useState(cloud);
+  const githubPages = import.meta.env.MODE === 'pages';
+  const protectedSite = cloud || githubPages;
+  const storageKey = 'yifen-pages-access-until';
+  const [allowed, setAllowed] = useState(!protectedSite);
+  const [checking, setChecking] = useState(protectedSite);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   async function check() {
     setChecking(true);
     setError('');
+    if (githubPages) {
+      setAllowed(Number(localStorage.getItem(storageKey)) > Date.now());
+      setChecking(false);
+      return;
+    }
     try {
       const response = await fetch('/api/auth/session', {
         cache: 'no-store',
@@ -25,9 +33,10 @@ export default function AccessGate({ children }: { children: ReactNode }) {
     }
   }
   useEffect(() => {
-    if (!cloud) return;
+    if (!protectedSite) return;
     void check();
     const locked = () => {
+      if (githubPages) localStorage.removeItem(storageKey);
       setAllowed(false);
       setError('访问已过期，请重新输入密码。');
     };
@@ -56,15 +65,29 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               setBusy(true);
               setError('');
               try {
-                const response = await fetch('/api/auth/login', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'X-Yifen-Request': '1' },
-                  body: JSON.stringify({ password }),
-                  signal: AbortSignal.timeout(15000),
-                });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || '暂时无法登录，请重试。');
-                if (data.authenticated !== true) throw new Error('登录未完成，请重试。');
+                if (githubPages) {
+                  const expected = import.meta.env.VITE_STATIC_PASSWORD_HASH;
+                  if (!expected) throw new Error('访问密码尚未配置，请联系网站所有者。');
+                  const digest = await crypto.subtle.digest(
+                    'SHA-256',
+                    new TextEncoder().encode(password),
+                  );
+                  const actual = Array.from(new Uint8Array(digest), (byte) =>
+                    byte.toString(16).padStart(2, '0'),
+                  ).join('');
+                  if (actual !== expected) throw new Error('密码不正确，请重新输入。');
+                  localStorage.setItem(storageKey, String(Date.now() + 12 * 60 * 60 * 1000));
+                } else {
+                  const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Yifen-Request': '1' },
+                    body: JSON.stringify({ password }),
+                    signal: AbortSignal.timeout(15000),
+                  });
+                  const data = await response.json();
+                  if (!response.ok) throw new Error(data.error || '暂时无法登录，请重试。');
+                  if (data.authenticated !== true) throw new Error('登录未完成，请重试。');
+                }
                 setPassword('');
                 setAllowed(true);
               } catch (e) {
@@ -96,9 +119,11 @@ export default function AccessGate({ children }: { children: ReactNode }) {
         {error && (
           <div className="access-error" role="alert">
             {error}
-            <button className="text-button" onClick={() => void check()} disabled={busy}>
-              重新连接
-            </button>
+            {cloud && (
+              <button className="text-button" onClick={() => void check()} disabled={busy}>
+                重新连接
+              </button>
+            )}
           </div>
         )}
         <p className="access-note">

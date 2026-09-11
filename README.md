@@ -1,10 +1,18 @@
 # 一分 · 表达练习室
 
+## 👉 [点击打开手机版表达练习室](https://lixinyan1025-commits.github.io/yifen-expression-studio/)
+
+[![打开网站](https://img.shields.io/badge/%E7%82%B9%E5%87%BB%E6%89%93%E5%BC%80-%E4%B8%80%E5%88%86%E8%A1%A8%E8%BE%BE%E7%BB%83%E4%B9%A0%E5%AE%A4-e53935?style=for-the-badge)](https://lixinyan1025-commits.github.io/yifen-expression-studio/)
+
+手机网络受限时优先使用 GitHub Pages 入口。它支持学习、常见话题、计时、录音、回听、Markdown 导入和当前浏览器历史记录；GitHub Pages 无法运行安全后端，因此不提供语音转写和 AI 分析。完整服务端密码保护版本：<https://yifen-expression-studio.lixinyan1025.chatgpt.site>。
+
+GitHub Pages 版本通过仓库的 `main` 分支和 `.github/workflows/deploy-pages.yml` 自动发布。访问密码的 SHA-256 值保存在 GitHub Actions Secret 中，明文不进入仓库；由于校验发生在浏览器端，这层密码只用于避免随手打开，不能替代服务端访问控制。私人笔记和练习记录不会打包进网站。
+
 面向 Obsidian 用户的中文表达训练网站：**十分钟学习 → 现实场景题 → 一分钟演讲 → 证据复盘 → 同题再练**。
 
 ## 密码保护的在线版与手机优先流程（2026-09-11 更新）
 
-在线网站允许公网打开，但必须输入站点访问密码。服务端只保存 PBKDF2 密码哈希，验证成功后签发 12 小时有效的 HttpOnly、Secure、SameSite=Strict 签名 Cookie；付费 API 全部在服务端再次校验会话。GitHub 源码仓库继续保持私有。当前尚未配置真实转写 / AI 密钥。
+完整后端版允许公网打开，但必须输入站点访问密码。服务端只保存 PBKDF2 密码哈希，验证成功后签发 12 小时有效的 HttpOnly、Secure、SameSite=Strict 签名 Cookie；付费 API 全部在服务端再次校验会话。GitHub 仓库按其他网页项目的格式公开展示，但不包含密码、私人笔记、录音或本机 `.env`。当前尚未配置真实转写 / AI 密钥。
 
 训练无需先导入笔记。话题从 12 个常见生活、社交、学习与工作场景中随机抽取，避免紧接着重复上一题；不读取笔记标题、标签或正文进行匹配。默认先阅读三条话题相关的简短背景信息，学习结束后再揭晓具体问题。可提前结束学习；准备模式仍可先看题目。资料为明确标注的编辑情境信息，提供背景而非标准答案、整篇笔记或讲稿。AI 出题仅接收随机主题和问题种子，同时生成简短背景信息，不接收个人笔记。
 

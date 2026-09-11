@@ -51,6 +51,8 @@ const pages = [
 const apiNotes = (notes: Note[]) =>
   notes.map(({ id, title, body, tags }) => ({ id, title, body: body.slice(0, 8000), tags }));
 const cloud = import.meta.env.MODE === 'cloud';
+const githubPages = import.meta.env.MODE === 'pages';
+const hosted = cloud || githubPages;
 
 export default function App() {
   const [preferences] = useState(readPreferences);
@@ -409,7 +411,7 @@ export default function App() {
         允许本次训练使用 AI
         出题、转写与复盘。出题不上传笔记；复盘可上传题目、录音和所选储备笔记节选。
         <small>
-          经{cloud ? '云端' : '本机'}服务发送至 {status?.aiHost || '配置的 AI 服务'} /{' '}
+          经{hosted ? '云端' : '本机'}服务发送至 {status?.aiHost || '配置的 AI 服务'} /{' '}
           {status?.sttHost || '语音服务'}
           ；每篇笔记最多前 8,000 字符。取消勾选后不再发起新请求。
         </small>
@@ -510,7 +512,7 @@ export default function App() {
           </span>
         </header>
         <div className="content">
-          {cloud && phase === 'idle' && (
+          {hosted && phase === 'idle' && (
             <div className="notice">
               <ShieldCheck size={20} />
               <span>密码访问 · 练习记录保存在当前浏览器。</span>
@@ -519,10 +521,12 @@ export default function App() {
           {serviceOnline === false && (
             <div role="status" className="notice warning service-offline">
               <div>
-                <strong>{cloud ? '在线服务暂时未连接' : '本地网站服务未连接'}</strong>
+                <strong>{hosted ? '在线服务暂时未连接' : '本地网站服务未连接'}</strong>
                 <p>
-                  {cloud
-                    ? '已保存的笔记和录音仍在当前浏览器。请检查网络，确认已登录站点所属账号，再点击重新检测。'
+                  {hosted
+                    ? githubPages
+                      ? 'GitHub Pages 版保留学习、录音和回听，语音转写与 AI 分析需使用带后端服务的版本。'
+                      : '已保存的笔记和录音仍在当前浏览器。请检查网络后再点击重新检测。'
                     : '已保存的笔记和录音仍在本机。请双击项目里的「打开表达练习室.cmd」，再点击重新检测。'}
                 </p>
               </div>
@@ -1019,11 +1023,11 @@ export default function App() {
                   {!vault?.configured && (
                     <div className="notice">
                       <span>
-                        {cloud
+                        {hosted
                           ? '在线版请导入智慧目录中的 .md 文件；云端无法直接读取你电脑的 Obsidian。'
                           : '可在本机配置 Obsidian 智慧目录，实现只读同步。'}
                       </span>
-                      {!cloud && (
+                      {!hosted && (
                         <button disabled={!!busy} onClick={() => void syncVault()}>
                           读取本机连接
                         </button>
@@ -1297,12 +1301,12 @@ export default function App() {
                   <div className="page-intro">
                     <span className="eyebrow">A SPACE YOU CAN TRUST</span>
                     <h1>服务与隐私</h1>
-                    {cloud && (
+                    {hosted && (
                       <button
                         className="text-button"
                         onClick={async () => {
                           try {
-                            await api('auth/logout', {});
+                            if (cloud) await api('auth/logout', {});
                             window.dispatchEvent(new Event('yifen-locked'));
                           } catch {
                             setNotice('暂时无法退出，请稍后重试。');
@@ -1342,8 +1346,12 @@ export default function App() {
                       </div>
                     </div>
                     <p>
-                      {cloud ? (
-                        '在线版密钥仅在 Sites 的环境变量设置中配置，前端不会读取密钥。配置 AI_API_KEY、STT_API_KEY 及所需模型后，重新发布网站即可使用。'
+                      {hosted ? (
+                        githubPages ? (
+                          'GitHub Pages 是静态托管，不能保存服务端密钥，因此该入口不提供语音转写和 AI 分析；完整练习可在带后端的在线版或本机版中使用。'
+                        ) : (
+                          '在线版密钥仅在 Sites 的环境变量设置中配置，前端不会读取密钥。配置 AI_API_KEY、STT_API_KEY 及所需模型后，重新发布网站即可使用。'
+                        )
                       ) : (
                         <>
                           密钥仅由本机 Node 服务读取。请编辑项目中的 <code>.env</code>，保留已有
@@ -1366,8 +1374,10 @@ export default function App() {
                     </details>
                     <p className="caption">
                       没有服务也能完成学习、内置题目、录音与回听；完整表达分析需要真实服务。
-                      {cloud
-                        ? '本站通过访问密码解锁，无需注册或登录 ChatGPT 账号。'
+                      {hosted
+                        ? githubPages
+                          ? '本站通过访问密码解锁；密码校验在当前浏览器完成。'
+                          : '本站通过访问密码解锁，无需注册或登录 ChatGPT 账号。'
                         : '本地版仅监听当前电脑。'}
                     </p>
                   </section>
@@ -1424,7 +1434,7 @@ export default function App() {
                       WAV、题目、原始转写、停顿数据与所选笔记节选。出题仅发送常见主题，不发送笔记。不会发送整个知识库。
                     </p>
                     <p>
-                      {cloud ? '云端接口' : '本机服务器'}
+                      {hosted ? '云端接口' : '本机服务器'}
                       不持久保存音频和笔记，也不记录内容日志。配置的服务提供方可能按其政策保留上传内容；删除本机记录不会删除服务方已接收的数据。
                     </p>
                     {consent}
