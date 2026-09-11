@@ -16,7 +16,11 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
   } catch {
     throw new Error('服务返回异常。在线版请确认登录状态，本地版请确认网站服务正在运行，然后重试。');
   }
-  if (!res.ok) throw new Error(data.error || `请求失败（${res.status}）`);
+  if (!res.ok) {
+    if (res.status === 401 && import.meta.env.MODE === 'cloud')
+      window.dispatchEvent(new Event('yifen-locked'));
+    throw new Error(data.error || `请求失败（${res.status}）`);
+  }
   return data as T;
 }
 export function blobBase64(blob: Blob): Promise<string> {

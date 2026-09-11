@@ -2512,8 +2512,95 @@ details > p {
   }
 }
 .reading-brief {
+  /* Short scenario information replaces full personal notes during study. */
   max-width: 760px;
   margin: 0 auto 28px;
+}
+.access-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 28px 20px;
+  background: radial-gradient(ellipse at 15% 10%, #e9f0de, transparent 60%), #f7f8f1;
+}
+.access-card {
+  width: min(100%, 430px);
+  padding: 42px 30px;
+  background: #fffefa;
+  border: 1px solid #e0e7d5;
+  border-radius: 24px;
+  box-shadow: 0 18px 60px #34482b09;
+}
+.access-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #466945;
+  font-size: 14px;
+}
+.access-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 19px;
+  background: #eaf0df;
+  color: #4b754b;
+  margin: 36px 0 24px;
+}
+.access-card h1 {
+  font-family: var(--serif);
+  font-size: 29px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.access-card > p {
+  font-size: 14px;
+  color: #718065;
+  line-height: 1.9;
+}
+.access-card form {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.access-card label {
+  font-size: 13px;
+  color: #54654b;
+}
+.access-card input {
+  width: 100%;
+  height: 52px;
+  border-radius: 11px;
+  border: 1px solid #d9e1ce;
+  background: #fbfcf7;
+  padding: 12px 15px;
+  font-size: 16px;
+}
+.access-card .primary {
+  justify-content: center;
+  min-height: 52px;
+  font-size: 16px;
+  margin-top: 5px;
+}
+.access-card .access-note {
+  margin-top: 28px;
+  font-size: 12px;
+}
+.access-error {
+  margin-top: 18px;
+  font-size: 13px;
+  color: #954f39;
+  line-height: 1.7;
+}
+@media (max-width: 380px) {
+  .access-card {
+    padding: 30px 22px;
+  }
+  .access-card h1 {
+    font-size: 25px;
+  }
 }
 .brief-intro {
   margin-bottom: 22px;

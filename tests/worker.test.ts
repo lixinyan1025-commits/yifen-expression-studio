@@ -3,59 +3,106 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { handleRequest } from '../worker';
+import { passwordHash } from '../worker/auth';
 import { encodeWav } from '../shared/audio';
 import { fixtureReport, fixtureSegments, tone } from './fixtures';
 const origin = 'https://private-site.test';
-const identity = { 'oai-authenticated-user-id': 'TEST_GATEWAY_ID' };
-const headers = { ...identity, 'content-type': 'application/json', 'x-yifen-request': '1', origin };
-const post = (path: string, body: unknown, extra = {}) =>
+const testPassword = 'TEST_ONLY_PASSWORD';
+const accessEnv = async () => ({
+  SITE_PASSWORD_HASH: await passwordHash(testPassword, new Uint8Array(16).fill(7)),
+  SITE_SESSION_SECRET: 'TEST_ONLY_SESSION_SECRET_32_BYTES_LONG',
+});
+const headers = { 'content-type': 'application/json', 'x-yifen-request': '1', origin };
+const post = (path: string, body: unknown, extra: Record<string, string> = {}) =>
   new Request(origin + path, {
     method: 'POST',
     headers: { ...headers, ...extra },
     body: JSON.stringify(body),
   });
+async function authenticated() {
+  const env = await accessEnv();
+  const login = await handleRequest(
+    post(
+      '/api/auth/login',
+      { password: testPassword },
+      {
+        'cf-connecting-ip': crypto.randomUUID(),
+      },
+    ),
+    env,
+  );
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie')?.split(';')[0];
+  assert.ok(cookie);
+  return { env, cookie };
+}
 
-test('cloud routes require gateway identity, reject cross-site calls and never expose secrets or local vault', async () => {
-  assert.equal((await handleRequest(new Request(origin + '/api/status'), {})).status, 401);
-  const emailIdentity = await handleRequest(
-    new Request(origin + '/api/status', {
-      headers: { 'oai-authenticated-user-email': 'TEST_OWNER@example.invalid' },
-    }),
-    {},
-  );
-  assert.equal(emailIdentity.status, 200);
+test('cloud routes require a signed password session, reject cross-site calls and never expose secrets or local vault', async () => {
+  const { env, cookie } = await authenticated();
+  assert.equal((await handleRequest(new Request(origin + '/api/status'), env)).status, 401);
+  assert.equal((await handleRequest(new Request(origin + '/api/auth/session'), env)).status, 200);
   assert.equal(
-    (await handleRequest(post('/api/vault', {}, { origin: 'https://evil.test' }), {})).status,
+    (
+      await handleRequest(
+        post(
+          '/api/auth/login',
+          { password: 'wrong' },
+          {
+            'cf-connecting-ip': crypto.randomUUID(),
+          },
+        ),
+        env,
+      )
+    ).status,
+    401,
+  );
+  assert.equal(
+    (
+      await handleRequest(
+        post('/api/auth/login', { password: testPassword }, { origin: 'https://evil.test' }),
+        env,
+      )
+    ).status,
     403,
   );
   assert.equal(
-    (await handleRequest(post('/api/vault', {}, { 'x-yifen-request': '' }), {})).status,
+    (await handleRequest(post('/api/vault', {}, { cookie, origin: 'https://evil.test' }), env))
+      .status,
     403,
   );
-  const status = await handleRequest(new Request(origin + '/api/status', { headers: identity }), {
-    AI_API_KEY: 'TEST_SECRET',
-  });
+  const configured = { ...env, AI_API_KEY: 'TEST_SECRET' };
+  const status = await handleRequest(
+    new Request(origin + '/api/status', { headers: { cookie } }),
+    configured,
+  );
   const result = await status.json();
   assert.equal(result.runtime, 'cloud');
   assert.equal(result.ai, true);
   assert.ok(!JSON.stringify(result).includes('TEST_SECRET'));
-  const vault = await (await handleRequest(post('/api/vault', { path: 'C:/' }), {})).json();
+  const vault = await (
+    await handleRequest(post('/api/vault', { path: 'C:/' }, { cookie }), configured)
+  ).json();
   assert.equal(vault.configured, false);
   assert.deepEqual(vault.notes, []);
-  assert.equal((await handleRequest(post('/api/transcribe', {}), {})).status, 503);
+  assert.equal((await handleRequest(post('/api/transcribe', {}, { cookie }), env)).status, 503);
+  const logout = await handleRequest(post('/api/auth/logout', {}, { cookie }), env);
+  assert.equal(logout.status, 200);
+  assert.match(logout.headers.get('set-cookie') || '', /Max-Age=0/);
 });
 
 test('cloud body limit applies to streamed bytes even without Content-Length', async () => {
+  const { env, cookie } = await authenticated();
   const request = new Request(origin + '/api/analyze', {
     method: 'POST',
-    headers,
+    headers: { ...headers, cookie },
     body: ' '.repeat(20 * 1024 * 1024 + 1),
   });
   assert.equal(request.headers.has('content-length'), false);
-  assert.equal((await handleRequest(request, {})).status, 413);
+  assert.equal((await handleRequest(request, env)).status, 413);
 });
 
 test('cloud adapter preserves exact audio, transcript timestamps and grounded analysis across HTTP provider calls', async (t) => {
+  const auth = await authenticated();
   const bytes = encodeWav(tone(6), 24000);
   const audio = Buffer.from(bytes).toString('base64');
   let analyzedAudio = '';
@@ -86,17 +133,25 @@ test('cloud adapter preserves exact audio, transcript timestamps and grounded an
   });
   const base = `http://127.0.0.1:${(provider.address() as AddressInfo).port}`;
   const env = {
+    ...auth.env,
     AI_API_KEY: 'TEST_ONLY',
     STT_API_KEY: 'TEST_ONLY',
     AI_BASE_URL: base,
     STT_BASE_URL: base,
   };
-  const tr = await handleRequest(post('/api/transcribe', { audio, threshold: 1.5 }), env);
+  const tr = await handleRequest(
+    post('/api/transcribe', { audio, threshold: 1.5 }, { cookie: auth.cookie }),
+    env,
+  );
   assert.equal(tr.status, 200);
   const transcript = await tr.json();
   assert.deepEqual(transcript.segments, fixtureSegments);
   const ar = await handleRequest(
-    post('/api/analyze', { audio, threshold: 1.5, transcript, topic: '你会怎么行动？', notes: [] }),
+    post(
+      '/api/analyze',
+      { audio, threshold: 1.5, transcript, topic: '你会怎么行动？', notes: [] },
+      { cookie: auth.cookie },
+    ),
     env,
   );
   assert.equal(ar.status, 200);

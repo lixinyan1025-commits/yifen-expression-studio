@@ -7,6 +7,7 @@ import {
   analyze,
 } from '../server/services';
 import { z } from 'zod';
+import { authorize, type AccessEnv } from './auth';
 // Workers prohibit runtime code generation. Use Zod's interpreted validators.
 z.config({ jitless: true });
 
@@ -21,9 +22,10 @@ export type Env = Partial<
     | 'STT_MODEL',
     string
   >
-> & {
-  ASSETS?: { fetch(request: Request): Promise<Response> };
-};
+> &
+  AccessEnv & {
+    ASSETS?: { fetch(request: Request): Promise<Response> };
+  };
 const limit = 20 * 1024 * 1024;
 const json = (body: unknown, status = 200) =>
   Response.json(body, {
@@ -31,20 +33,12 @@ const json = (body: unknown, status = 200) =>
     headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
   });
 
-// Identity headers are supplied by the Sites authentication gateway. This Worker
-// is deployed only through the owner-private Sites operation, never as a public Worker.
+// Every API call is protected by our signed password session, independent of
+// the hosting platform's audience settings or client-supplied identity headers.
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  // Sites currently supplies an authenticated email on some production routes;
-  // newer runtimes also supply a stable user ID. The gateway owns the allowlist.
-  if (
-    !request.headers.get('oai-authenticated-user-id') &&
-    !request.headers.get('oai-authenticated-user-email')
-  ) {
-    if (url.pathname.startsWith('/api/'))
-      return json({ error: '请先登录本站所属的 ChatGPT 账号。' }, 401);
-    return Response.redirect(new URL('/signin-with-chatgpt?return_to=%2F', url), 302);
-  }
+  const gate = await authorize(request, env);
+  if (gate) return gate;
   if (!url.pathname.startsWith('/api/')) {
     if (!env.ASSETS) return new Response('页面资源尚未就绪', { status: 503 });
     return env.ASSETS.fetch(request);

@@ -513,7 +513,7 @@ export default function App() {
           {cloud && phase === 'idle' && (
             <div className="notice">
               <ShieldCheck size={20} />
-              <span>私人在线版 · 仅本人登录访问，数据保存在当前浏览器。</span>
+              <span>密码访问 · 练习记录保存在当前浏览器。</span>
             </div>
           )}
           {serviceOnline === false && (
@@ -1297,6 +1297,21 @@ export default function App() {
                   <div className="page-intro">
                     <span className="eyebrow">A SPACE YOU CAN TRUST</span>
                     <h1>服务与隐私</h1>
+                    {cloud && (
+                      <button
+                        className="text-button"
+                        onClick={async () => {
+                          try {
+                            await api('auth/logout', {});
+                            window.dispatchEvent(new Event('yifen-locked'));
+                          } catch {
+                            setNotice('暂时无法退出，请稍后重试。');
+                          }
+                        }}
+                      >
+                        锁定网站
+                      </button>
+                    )}
                     <p>知道内容存在哪里，也知道每次上传是为了什么。</p>
                   </div>
                   <section className="panel">
@@ -1352,7 +1367,7 @@ export default function App() {
                     <p className="caption">
                       没有服务也能完成学习、内置题目、录音与回听；完整表达分析需要真实服务。
                       {cloud
-                        ? '本站通过 ChatGPT 账号登录，仅站点所有者可访问。'
+                        ? '本站通过访问密码解锁，无需注册或登录 ChatGPT 账号。'
                         : '本地版仅监听当前电脑。'}
                     </p>
                   </section>

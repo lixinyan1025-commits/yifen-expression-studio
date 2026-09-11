@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import AccessGate from './AccessGate';
 import './styles.css';
 class ErrorBoundary extends React.Component<React.PropsWithChildren, { failed: boolean }> {
   state = { failed: false };
@@ -21,6 +22,8 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, { failed: b
 }
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
-    <App />
+    <AccessGate>
+      <App />
+    </AccessGate>
   </ErrorBoundary>,
 );
