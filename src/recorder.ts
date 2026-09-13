@@ -5,6 +5,7 @@ export type RecorderControl = { stop: (interrupted?: boolean) => void; cancel: (
 export async function startCapture(options: {
   threshold: number;
   onStart: (deadline: number) => void;
+  onStop?: () => void;
   onLevel: (v: number) => void;
   onFinish: (capture: Capture) => void;
   onError: (message: string, original?: Blob) => void;
@@ -73,6 +74,7 @@ export async function startCapture(options: {
   recorder.onstop = async () => {
     clearTimeout(timeout);
     cancelAnimationFrame(frame);
+    options.onStop?.();
     options.onLevel(0);
     stream.getTracks().forEach((t) => {
       t.onended = null;

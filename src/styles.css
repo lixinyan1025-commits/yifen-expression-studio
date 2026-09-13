@@ -1876,6 +1876,27 @@ details > p {
   }
 }
 @media (max-width: 600px) {
+  .report-stack,
+  .report-stack > .panel,
+  .report-heading > div,
+  .playback,
+  .transcript,
+  .issue {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .report-stack button,
+  .report-stack p,
+  .report-stack blockquote,
+  .report-stack .raw-text,
+  .report-stack .improved {
+    overflow-wrap: anywhere;
+  }
+  .playback audio {
+    min-width: 0;
+    max-width: 100%;
+  }
   .app-shell {
     display: block;
   }
@@ -2593,6 +2614,46 @@ details > p {
   font-size: 13px;
   color: #954f39;
   line-height: 1.7;
+}
+.live-transcript {
+  width: min(100%, 680px);
+  margin: 18px auto 4px;
+  padding: 17px 18px;
+  border: 1px solid #dce5d3;
+  border-radius: 14px;
+  background: #fbfcf7;
+  text-align: left;
+}
+.live-transcript p {
+  min-height: 54px;
+  margin: 12px 0 8px;
+  color: #34452f;
+  font-size: 16px;
+  line-height: 1.85;
+}
+.live-transcript p > span {
+  color: #7c8b73;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+.live-transcript small {
+  color: var(--muted);
+}
+.live-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 13px;
+}
+.live-signals span {
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: #edf2e7;
+  color: #56664d;
+  font-size: 11px;
+}
+.browser-speech-note {
+  cursor: default;
 }
 @media (max-width: 380px) {
   .access-card {

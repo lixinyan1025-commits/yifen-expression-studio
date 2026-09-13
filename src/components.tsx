@@ -99,6 +99,7 @@ export function ReportView({
       });
   };
   const report = session.report;
+  const local = session.transcript?.model === 'browser-web-speech-live';
   const confirmed = (s: Session, kind: string) =>
     s.report?.issues.filter(
       (i) => i.kinds.includes(kind as (typeof kinds)[number]) && i.status === 'confirmed',
@@ -215,8 +216,9 @@ export function ReportView({
           </p>
         )}
         <p className="caption">
-          问题与转写使用这份 WAV
-          的同一时间轴。转写定位精度为语音服务返回的分段，点击后会保留少量前后文。
+          {local
+            ? '停顿使用这份 WAV 的真实时间轴；浏览器实时转写没有可靠词级时间戳，文字定位按识别结果返回时刻近似，点击后请结合前后原音核对。'
+            : '问题与转写使用这份 WAV 的同一时间轴。转写定位精度为语音服务返回的分段，点击后会保留少量前后文。'}
         </p>
       </section>
       {busy && (
@@ -340,7 +342,9 @@ export function ReportView({
       <section className="panel">
         <h3>带时间标记的转写原文</h3>
         <p className="caption">
-          保留服务原始返回内容，未经润色。语音识别仍可能遗漏口头禅、重复或识别错误，请以回听为准。
+          {local
+            ? '保留浏览器实时识别原文，未经润色。识别可能遗漏口头禅、重复或产生错字，请以回听为准。'
+            : '保留服务原始返回内容，未经润色。语音识别仍可能遗漏口头禅、重复或识别错误，请以回听为准。'}
         </p>
         {session.transcript ? (
           <>
@@ -405,10 +409,12 @@ export function ReportView({
           </section>
           <section className="panel">
             <span className="eyebrow">保留你的意思</span>
-            <h3>一种更清楚的说法</h3>
+            <h3>{local ? '本机基础分析保留的原话' : '一种更清楚的说法'}</h3>
             <p className="improved">{report.improved}</p>
             <p className="caption">
-              AI 根据本次回答整理的练习示例。请检查是否符合你的本意，再用自己的话说一遍。
+              {local
+                ? '本机规则不会冒充 AI 改写。这里保留实时转写，方便你结合录音自行整理。'
+                : 'AI 根据本次回答整理的练习示例。请检查是否符合你的本意，再用自己的话说一遍。'}
             </p>
           </section>
           <section className="panel">
@@ -428,8 +434,9 @@ export function ReportView({
           <section className="panel">
             <h3>分析边界</h3>
             <p className="caption">
-              此报告由音频模型结合
-              WAV、未润色转写和声学停顿数据生成，属于待核实的训练建议。引用一致不等于判断一定正确。
+              {local
+                ? '此报告由当前浏览器结合真实 WAV、实时转写和明确规则生成，只标记可核验线索，所有条目仍需回听确认。'
+                : '此报告由音频模型结合 WAV、未润色转写和声学停顿数据生成，属于待核实的训练建议。引用一致不等于判断一定正确。'}
             </p>
             {report.limitations.map((l, i) => (
               <p className="caption" key={i}>

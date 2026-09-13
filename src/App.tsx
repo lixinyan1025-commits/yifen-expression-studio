@@ -38,6 +38,13 @@ import { api, blobBase64 } from './api';
 import { micError, startCapture, type RecorderControl } from './recorder';
 import { date, download, NoteBody, ReportView, time } from './components';
 import { readPreferences, savePreferences } from './preferences';
+import { liveSignals, localReport } from '../shared/localAnalysis';
+import {
+  browserTranscript,
+  startLiveSpeech,
+  type LiveSpeechControl,
+  type LiveSpeechSnapshot,
+} from './liveSpeech';
 
 type Page = 'train' | 'library' | 'history' | 'settings';
 type Phase =
@@ -88,7 +95,12 @@ export default function App() {
     [storageSize, setStorageSize] = useState('');
   const fileInput = useRef<HTMLInputElement>(null),
     recorder = useRef<RecorderControl | null>(null),
+    speech = useRef<LiveSpeechControl | null>(null),
+    speechResult = useRef<Promise<LiveSpeechSnapshot> | null>(null),
     endingStudy = useRef(false);
+  const [liveText, setLiveText] = useState(''),
+    [liveInterim, setLiveInterim] = useState(''),
+    [liveStatus, setLiveStatus] = useState('');
   const locked =
     ['study', 'topic', 'ready', 'requesting', 'recording', 'saving'].includes(phase) ||
     !!busy ||
@@ -116,6 +128,20 @@ export default function App() {
     }
   };
   const refreshStatus = async () => {
+    if (githubPages) {
+      setStatus({
+        runtime: 'cloud',
+        ai: false,
+        stt: false,
+        aiHost: 'GitHub Pages 本机基础模式',
+        sttHost: '浏览器实时语音识别',
+        topicModel: '内置常见话题',
+        audioModel: '本机证据规则',
+        sttModel: 'Web Speech API',
+      });
+      setServiceOnline(null);
+      return;
+    }
     try {
       setStatus(await api<ServiceStatus>('status'));
       setServiceOnline(true);
@@ -140,7 +166,10 @@ export default function App() {
     void navigator.storage
       ?.estimate()
       .then((s) => setStorageSize(`${((s.usage || 0) / 1024 / 1024).toFixed(1)} MB`));
-    return () => recorder.current?.cancel();
+    return () => {
+      recorder.current?.cancel();
+      speech.current?.cancel();
+    };
   }, []);
   useEffect(() => {
     if (!locked && !unsaved) return;
@@ -153,7 +182,10 @@ export default function App() {
   useEffect(() => {
     if (phase !== 'recording') return;
     const hidden = () => {
-      if (document.hidden) recorder.current?.stop(true);
+      if (document.hidden) {
+        void finishLiveSpeech();
+        recorder.current?.stop(true);
+      }
     };
     document.addEventListener('visibilitychange', hidden);
     return () => document.removeEventListener('visibilitychange', hidden);
@@ -297,8 +329,39 @@ export default function App() {
       endingStudy.current = false;
     }
   };
+  const finishLiveSpeech = () => {
+    if (speechResult.current) return speechResult.current;
+    const current = speech.current;
+    speech.current = null;
+    if (!current) return undefined;
+    speechResult.current = current.stop();
+    return speechResult.current;
+  };
   const runAnalysis = async (s: Session) => {
     let next = { ...s, error: undefined };
+    if (githubPages) {
+      setBusy('正在根据原始转写和音频证据生成基础复盘');
+      try {
+        if (!next.transcript)
+          throw new Error(
+            '本次没有获得有效实时转写。录音已保存，可正常回听；请使用最新版 Chrome 重试。',
+          );
+        next.report = localReport({
+          transcript: next.transcript,
+          facts: next.facts,
+          topic: next.topic,
+        });
+        await saveSession(next);
+      } catch (cause) {
+        await saveSession({
+          ...next,
+          error: cause instanceof Error ? cause.message : '基础分析失败。',
+        });
+      } finally {
+        setBusy('');
+      }
+      return;
+    }
     if (!allowAi) {
       await saveSession({
         ...next,
@@ -336,6 +399,10 @@ export default function App() {
     if (!topic || recorder.current || phase === 'requesting') return;
     setNotice('');
     setRecoveryAudio(undefined);
+    setLiveText('');
+    setLiveInterim('');
+    setLiveStatus('');
+    speechResult.current = null;
     setPhase('requesting');
     try {
       recorder.current = await startCapture({
@@ -344,13 +411,33 @@ export default function App() {
           setRemaining(60);
           setDeadline(end);
           setPhase('recording');
+          if (githubPages) {
+            try {
+              speech.current = startLiveSpeech({
+                onUpdate: (text, interim) => {
+                  setLiveText(text);
+                  setLiveInterim(interim);
+                },
+                onStatus: setLiveStatus,
+              });
+            } catch (cause) {
+              setLiveStatus(
+                cause instanceof Error
+                  ? cause.message
+                  : '实时转写无法启动，录音仍可正常保存和回听。',
+              );
+            }
+          }
+        },
+        onStop: () => {
+          if (githubPages) void finishLiveSpeech();
         },
         onLevel: setLevel,
         onFinish: (capture) => {
           recorder.current = null;
           setDeadline(undefined);
           setPhase('saving');
-          const s: Session = {
+          const base: Session = {
             id: crypto.randomUUID(),
             createdAt: new Date().toISOString(),
             topic,
@@ -360,12 +447,38 @@ export default function App() {
             threshold,
           };
           void (async () => {
-            const saved = await saveSession(s);
+            let next = base;
+            if (githubPages) {
+              setBusy('正在整理实时转写和音频证据');
+              const captured = await finishLiveSpeech();
+              const transcript = captured
+                ? await browserTranscript(captured, base.audio, base.facts.duration)
+                : undefined;
+              if (transcript)
+                next = {
+                  ...base,
+                  transcript,
+                  report: localReport({ transcript, facts: base.facts, topic: base.topic }),
+                };
+              else
+                next = {
+                  ...base,
+                  error:
+                    captured?.error ||
+                    liveStatus ||
+                    '本次没有获得有效实时转写。录音已保存，可正常回听。',
+                };
+              setBusy('');
+            }
+            const saved = await saveSession(next);
             setPhase('review');
-            if (saved && allowAi) await runAnalysis(s);
+            if (!githubPages && saved && allowAi) await runAnalysis(base);
           })();
         },
         onError: (message, original) => {
+          speech.current?.cancel();
+          speech.current = null;
+          speechResult.current = null;
           recorder.current = null;
           setDeadline(undefined);
           setPhase('ready');
@@ -374,6 +487,8 @@ export default function App() {
         },
       });
     } catch (e) {
+      speech.current?.cancel();
+      speech.current = null;
       setPhase('ready');
       setNotice(micError(e));
     }
@@ -399,7 +514,18 @@ export default function App() {
     setPage('train');
     setNotice('');
   };
-  const consent = (
+  const consent = githubPages ? (
+    <div className="consent browser-speech-note">
+      <Mic size={19} />
+      <span>
+        GitHub Pages 版会在录音时启动浏览器实时中文识别，结束后自动生成本机基础复盘。
+        <small>
+          不调用本项目的在线服务器；Chrome
+          等浏览器可能将音频交给浏览器厂商的语音服务处理。详细语义与逻辑分析仍需配置真实 AI 服务。
+        </small>
+      </span>
+    </div>
+  ) : (
     <label className="consent">
       <input
         type="checkbox"
@@ -435,6 +561,7 @@ export default function App() {
         .toLowerCase()
         .includes(search.trim().toLowerCase()),
   );
+  const currentSignals = liveSignals(liveText);
   const toggleStudyPause = () => {
     if (studyPaused) {
       setDeadline(Date.now() + pauseMilliseconds.current);
@@ -933,9 +1060,42 @@ export default function App() {
                           <span style={{ width: `${Math.min(100, level * 650)}%` }} />
                         </div>
                       )}
+                      {phase === 'recording' && githubPages && (
+                        <div className="live-transcript" aria-live="polite">
+                          <div className="row spread">
+                            <strong>实时转写</strong>
+                            <span className="tag">边讲边整理</span>
+                          </div>
+                          <p>
+                            {liveText ? (
+                              <>
+                                {liveText.slice(
+                                  0,
+                                  Math.max(0, liveText.length - liveInterim.length),
+                                )}
+                                <span>{liveInterim}</span>
+                              </>
+                            ) : (
+                              '开始说话后，原始识别文字会显示在这里。'
+                            )}
+                          </p>
+                          <small>{liveStatus || '正在等待语音…'}</small>
+                          <div className="live-signals">
+                            <span>已识别 {currentSignals.characters} 字</span>
+                            <span>填充词线索 {currentSignals.fillers}</span>
+                            <span>重复线索 {currentSignals.repeats}</span>
+                          </div>
+                        </div>
+                      )}
                       <div className="speech-actions">
                         {phase === 'recording' ? (
-                          <button className="danger" onClick={() => recorder.current?.stop()}>
+                          <button
+                            className="danger"
+                            onClick={() => {
+                              void finishLiveSpeech();
+                              recorder.current?.stop();
+                            }}
+                          >
                             <Square size={16} />
                             结束演讲，查看复盘
                           </button>
@@ -956,7 +1116,9 @@ export default function App() {
                       </div>
                       <span className="caption">
                         {phase === 'recording'
-                          ? '到时自动结束。请保持页面在前台，切换页面会提前停止并保存。'
+                          ? githubPages
+                            ? '到时自动结束并生成基础复盘。实时文字可能有误，结束后请结合录音核对。'
+                            : '到时自动结束。请保持页面在前台，切换页面会提前停止并保存。'
                           : '开始后同步录音与计时，60 秒自动结束。学习资料已收起。'}
                       </span>
                       {phase === 'ready' && (
