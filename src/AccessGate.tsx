@@ -1,20 +1,40 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { LockKeyhole, ArrowRight, Leaf } from 'lucide-react';
+import { storage } from './storage';
+import {
+  decryptKnowledge,
+  loadEncryptedKnowledge,
+  type EncryptedKnowledge,
+} from './knowledgeBundle';
 export default function AccessGate({ children }: { children: ReactNode }) {
   const cloud = import.meta.env.MODE === 'cloud';
   const githubPages = import.meta.env.MODE === 'pages';
   const protectedSite = cloud || githubPages;
   const storageKey = 'yifen-pages-access-until';
+  const bundleKey = 'yifen-pages-knowledge-id';
   const [allowed, setAllowed] = useState(!protectedSite);
   const [checking, setChecking] = useState(protectedSite);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [knowledge, setKnowledge] = useState<EncryptedKnowledge>();
   async function check() {
     setChecking(true);
     setError('');
     if (githubPages) {
-      setAllowed(Number(localStorage.getItem(storageKey)) > Date.now());
+      try {
+        const bundle = await loadEncryptedKnowledge();
+        setKnowledge(bundle);
+        const embedded = (await storage.notes()).filter((note) => note.source?.kind === 'obsidian');
+        setAllowed(
+          Number(localStorage.getItem(storageKey)) > Date.now() &&
+            localStorage.getItem(bundleKey) === bundle.id &&
+            embedded.length === bundle.noteCount,
+        );
+      } catch (cause) {
+        setAllowed(false);
+        setError(cause instanceof Error ? cause.message : '暂时无法读取加密知识库。');
+      }
       setChecking(false);
       return;
     }
@@ -37,6 +57,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
     void check();
     const locked = () => {
       if (githubPages) localStorage.removeItem(storageKey);
+      if (githubPages) localStorage.removeItem(bundleKey);
       setAllowed(false);
       setError('访问已过期，请重新输入密码。');
     };
@@ -66,17 +87,10 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               setError('');
               try {
                 if (githubPages) {
-                  const expected = import.meta.env.VITE_STATIC_PASSWORD_HASH;
-                  if (!expected) throw new Error('访问密码尚未配置，请联系网站所有者。');
-                  const digest = await crypto.subtle.digest(
-                    'SHA-256',
-                    new TextEncoder().encode(password),
-                  );
-                  const actual = Array.from(new Uint8Array(digest), (byte) =>
-                    byte.toString(16).padStart(2, '0'),
-                  ).join('');
-                  if (actual !== expected) throw new Error('密码不正确，请重新输入。');
+                  const bundle = knowledge || (await loadEncryptedKnowledge());
+                  await storage.syncVault(await decryptKnowledge(bundle, password));
                   localStorage.setItem(storageKey, String(Date.now() + 12 * 60 * 60 * 1000));
+                  localStorage.setItem(bundleKey, bundle.id);
                 } else {
                   const response = await fetch('/api/auth/login', {
                     method: 'POST',
@@ -111,7 +125,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               disabled={busy}
             />
             <button className="primary" disabled={busy || !password}>
-              {busy ? '正在解锁…' : '进入练习室'}
+              {busy ? (githubPages ? '正在解锁知识库…' : '正在解锁…') : '进入练习室'}
               <ArrowRight size={18} />
             </button>
           </form>
@@ -127,7 +141,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
           </div>
         )}
         <p className="access-note">
-          无需注册账号 · 学习 10 分钟 + 表达 1 分钟
+          无需注册账号 · {githubPages ? '知识库只在当前浏览器解密' : '学习 10 分钟 + 表达 1 分钟'}
           <br />
           练习记录仅保存在当前浏览器
         </p>

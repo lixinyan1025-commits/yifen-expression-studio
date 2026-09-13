@@ -38,8 +38,6 @@ jobs:
 
       - name: Build GitHub Pages site
         run: npm run build:pages
-        env:
-          VITE_STATIC_PASSWORD_HASH: ${{ secrets.STATIC_PASSWORD_HASH }}
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

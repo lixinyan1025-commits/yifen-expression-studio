@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => ({
   base: mode === 'pages' ? '/yifen-expression-studio/' : '/',
+  publicDir: mode === 'pages' ? 'pages-public' : false,
   plugins: [react()],
   server: {
     watch: { ignored: ['**/.local/**', '**/test-results/**', '**/playwright-report/**'] },

@@ -132,7 +132,7 @@ export default function App() {
         setNotes(n);
         setSessions(s);
         setSelected((ids) => ids.filter((id) => n.some((note) => note.id === id)));
-        await syncVault(false);
+        if (!hosted) await syncVault(false);
         setLoaded(true);
       })
       .catch(() => setNotice('无法打开本机存储，请允许浏览器保存网站数据后刷新。'));

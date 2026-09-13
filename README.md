@@ -4,9 +4,11 @@
 
 [![打开网站](https://img.shields.io/badge/%E7%82%B9%E5%87%BB%E6%89%93%E5%BC%80-%E4%B8%80%E5%88%86%E8%A1%A8%E8%BE%BE%E7%BB%83%E4%B9%A0%E5%AE%A4-e53935?style=for-the-badge)](https://lixinyan1025-commits.github.io/yifen-expression-studio/)
 
-手机网络受限时优先使用 GitHub Pages 入口。它支持学习、常见话题、计时、录音、回听、Markdown 导入和当前浏览器历史记录；GitHub Pages 无法运行安全后端，因此不提供语音转写和 AI 分析。完整服务端密码保护版本：<https://yifen-expression-studio.lixinyan1025.chatgpt.site>。
+手机网络受限时优先使用 GitHub Pages 入口。输入访问密码后，网站会自动解密并载入“01-智慧”的 60 篇笔记；同时支持学习、常见话题、计时、录音、回听、Markdown 导入和当前浏览器历史记录。GitHub Pages 无法运行安全后端，因此不提供语音转写和 AI 分析。完整服务端密码保护版本：<https://yifen-expression-studio.lixinyan1025.chatgpt.site>。
 
-GitHub Pages 版本通过仓库的 `main` 分支和 `.github/workflows/deploy-pages.yml` 自动发布。访问密码的 SHA-256 值保存在 GitHub Actions Secret 中，明文不进入仓库；由于校验发生在浏览器端，这层密码只用于避免随手打开，不能替代服务端访问控制。私人笔记和练习记录不会打包进网站。
+GitHub Pages 版本通过仓库的 `main` 分支和 `.github/workflows/deploy-pages.yml` 自动发布。“01-智慧”的 60 篇笔记使用 PBKDF2-SHA256（250,000 次）派生密钥和 AES-256-GCM 加密，输入访问密码后只在当前浏览器解密并写入 IndexedDB；仓库和构建产物只有密文，不含明文密码、笔记或录音。
+
+知识库有更新时，在本机临时设置 `YIFEN_BUNDLE_PASSWORD` 后运行 `npm.cmd run bundle:knowledge`，再提交新生成的 `pages-public/knowledge.enc.json`。脚本只读取 `.env` 中配置的 `OBSIDIAN_WISDOM_PATH`，不会修改 Obsidian 原文件，也不要把访问密码写入 `.env` 或提交记录。
 
 面向 Obsidian 用户的中文表达训练网站：**十分钟学习 → 现实场景题 → 一分钟演讲 → 证据复盘 → 同题再练**。
 
@@ -117,6 +119,7 @@ npm.cmd start
 
 - [remarkjs/react-markdown](https://github.com/remarkjs/react-markdown)，作者 Espen Hovlandsdal，MIT；复用安全 Markdown 渲染组件（`lib/index.js`）。不启用原始 HTML。
 - [jakearchibald/idb](https://github.com/jakearchibald/idb)，作者 Jake Archibald，ISC；复用 IndexedDB Promise / transaction 接口（`src/entry.ts`）。
+- [FileShot/FileShotZKE](https://github.com/FileShot/FileShotZKE)，FileShot 维护，MIT；参考其“浏览器原生 Web Crypto、PBKDF2 派生密钥、AES-256-GCM 客户端解密”的零知识文件思路。本项目按自身知识库数据结构独立实现，没有引入其代码或依赖。
 - 云端部署检索关键词：`site:github.com ".openai/hosting.json"`。核实 [openai/sites](https://github.com/openai/sites) 的 README、模板部署配置、打包插件源码与 MIT 许可证（OpenAI，2026）。参考其 `dist/server`、`dist/client` 和 `dist/.openai/hosting.json` 产物格式，自行编写适配现有 Vite 7 项目的 Fetch Worker 与打包脚本，保留现有 React 前端。运行时采用标准 Web Crypto、Request / Response 和 Fetch API。
 - 启动器参考 [nodejs/node 的 child_process 官方文档](https://github.com/nodejs/node/blob/main/doc/api/child_process.md)，作者 Node.js contributors，[MIT](https://github.com/nodejs/node/blob/main/LICENSE)。检索关键词：`site:github.com/nodejs/node child_process detached Windows`、`site:github.com/nodejs/node LICENSE MIT`。采用 Node 内置的 `spawn` / `detached` / `unref` / `windowsHide`，本项目自行实现健康检查和启动逻辑，未增加第三方进程管理依赖。
 
